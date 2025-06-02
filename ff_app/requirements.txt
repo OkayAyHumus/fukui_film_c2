@@ -33,7 +33,7 @@ pyarrow==20.0.0
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pydeck==0.9.1
-pykakasi==2.3.0
+pykakasi
 pyparsing==3.2.3
 PySocks==1.7.1
 python-dateutil==2.9.0.post0
