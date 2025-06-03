@@ -289,15 +289,24 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
             raise
 
         try:
-            logger.info("Clicking address search button")
+            logger.info(f"住所検索対象: {metadata.get('address')}")
             btn_geo = wait.until(EC.element_to_be_clickable((By.ID, "btn-g-search")))
             driver.execute_script("arguments[0].scrollIntoView(true);", btn_geo)
             time.sleep(1)
             btn_geo.click()
             time.sleep(1)
             logger.info("Waiting for latitude field to be filled...")
-            wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
-            logger.info("Latitude successfully populated")
+            try:
+                wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
+                logger.info("Latitude successfully populated")
+            except UnexpectedAlertPresentException:
+                try:
+                    alert = driver.switch_to.alert
+                    logger.warning(f"Geocode失敗: {alert.text}")
+                    alert.accept()
+                except NoAlertPresentException:
+                    logger.warning("アラートは検出されたが、取得できなかった")
+                raise
         except Exception as e:
             logger.error("Failed to get coordinates")
             logger.error(traceback.format_exc())
@@ -317,7 +326,6 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
                 logger.info("Chrome driver closed")
             else:
                 logger.info("ヘッドレスOFF のため、ブラウザが開いたままです。")
-
 # ========================
 # ログ表示コンポーネント
 # ========================
