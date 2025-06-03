@@ -71,12 +71,17 @@ def setup_chrome_options():
     return options
 
     
+import tempfile
+
 def get_chrome_driver_path():
-    """ChromeDriverを強制的にchromedriver_autoinstallerでセットアップ"""
+    """Streamlit Cloudで使える場所にchromedriverをインストール"""
     import chromedriver_autoinstaller
-    driver_path = chromedriver_autoinstaller.install()
+    temp_dir = os.path.join(tempfile.gettempdir(), "chromedriver")
+    os.makedirs(temp_dir, exist_ok=True)
+    driver_path = chromedriver_autoinstaller.install(path=temp_dir)
     logger.info(f"Chromedriver installed to: {driver_path}")
     return driver_path
+
 
 def install_chrome_and_driver():
     """Streamlit Cloudで自動インストールされる前提で常にTrueを返す"""
