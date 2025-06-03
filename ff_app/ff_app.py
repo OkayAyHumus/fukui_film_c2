@@ -27,6 +27,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import UnexpectedAlertPresentException, NoAlertPresentException
 
 # ========================
 # 定数
@@ -177,17 +178,16 @@ def search_location_info(place_name):
         url = f"https://maps.googleapis.com/maps/api/geocode/json?address={place_name}&language=ja&key={key}"
         response = requests.get(url, timeout=10)
         data = response.json()
-        
         if data.get("status") != "OK":
-            logger.warning(f"Geocoding failed for {place_name}: {data.get('status')}")
+            logger.warning(f"Geocoding failed for '{place_name}': {data.get('status')}")
             return "", "", ""
-        
         r = data["results"][0]
-        logger.info(f"Geocoding successful for {place_name}")
+        logger.info(f"Geocoding successful for '{place_name}'")
         return r["formatted_address"], r["geometry"]["location"]["lat"], r["geometry"]["location"]["lng"]
     except Exception as e:
         logger.error(f"Geocoding error: {e}")
         return "", "", ""
+
 
 def convert_to_furigana(text):
     try:
@@ -377,248 +377,43 @@ def show_system_info():
 def main():
     st.set_page_config(page_title="画像圧縮＋地名情報取得", layout="wide")
     st.title("📷 画像圧縮＋地名情報取得アプリ")
-    
-    # システム情報表示
-    show_system_info()
-    
-    # ログシステム初期化
-    show_logs()
-    
-    try:
-        # Drive & users
-        logger.info("Initializing Google Drive service")
-        service = get_drive_service()
-        users_df, _ = load_users(service, st.secrets["folders"]["admin_folder_id"])
-        
-        if users_df is None:
-            st.error("users.csv が見つかりません")
-            logger.error("users.csv not found")
-            return
-        
-        login(users_df)
-        if "username" not in st.session_state: 
-            st.stop()
-        
-        # FC-site 設定
-        st.sidebar.header("⚙️ FCサイト設定")
-        fc_user = st.sidebar.text_input("FC ログインID")
-        fc_pass = st.sidebar.text_input("FC パスワード", type="password")
-        headless = st.sidebar.checkbox("ヘッドレス実行", value=True)
-        
-        # Drive 画像フォルダ
-        folder_id = st.text_input("📁 Google Drive フォルダIDを入力")
-        if not folder_id: 
-            st.stop()
-        
-        logger.info(f"Loading images from folder: {folder_id}")
-        files = service.files().list(
-            q=f"'{folder_id}' in parents and mimeType contains 'image/' and trashed=false",
-            fields="files(id,name)"
-        ).execute().get("files", [])
-        
-        if not files: 
-            st.warning("画像が見つかりません")
-            logger.warning("No images found in the specified folder")
-            return
-        
-        logger.info(f"Found {len(files)} images")
-        
-        # 基本情報
-        place = st.text_input("地名（漢字）")
-        furigana = st.text_input("ふりがな")
-        desc = st.text_area("概要", "")
-        max_kb = st.sidebar.number_input("🔧 圧縮後最大KB", 50, 2048, 2000)
-        max_bytes = max_kb * 1024
-        
-        # 画像プレビュー＆設定
-        st.header("🖼️ 画像選択・補正")
-        select_all = st.checkbox("すべて選択")
-        settings = {}
-        os.makedirs("data", exist_ok=True)
-        
-        for f in files:
-            fid, name = f["id"], f["name"]
-            path = os.path.join("data", name)
-            
-            try:
-                with open(path, "wb") as fp: 
-                    fp.write(service.files().get_media(fileId=fid).execute())
-                img = Image.open(path)
-                
-                b = st.slider(f"明るさ[{name}]", 0.5, 2.0, 1.2, 0.1, key=f"b_{name}")
-                c = st.slider(f"コントラスト[{name}]", 0.5, 2.0, 1.2, 0.1, key=f"c_{name}")
-                col = st.slider(f"彩度[{name}]", 0.5, 2.0, 1.3, 0.1, key=f"col_{name}")
-                
-                en = enhance_image(img.copy(), b, c, col)
-                c1, c2 = st.columns(2)
-                with c1: 
-                    st.image(img, caption="元", use_container_width=True)
-                with c2: 
-                    st.image(en, caption="補正", use_container_width=True)
-                
-                main = st.checkbox("メインで使う", key=f"main_{name}")
-                sel = st.checkbox("選択", key=f"sel_{name}", value=select_all)
-                settings[name] = {"b": b, "c": c, "col": col, "main": main, "sel": sel}
-                
-            except Exception as e:
-                st.error(f"画像の読み込みに失敗しました: {name} - {e}")
-                logger.error(f"Failed to load image {name}: {e}")
-        
-        if st.button("🔍 圧縮→検索→Drive保存→自動登録"):
-            try:
-                # プログレスバー
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # 一時ディレクトリ
-                session_dir = f"output/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                os.makedirs(session_dir, exist_ok=True)
-                logger.info(f"Created session directory: {session_dir}")
-                
-                # 住所検索
-                status_text.text("住所情報を検索中...")
-                progress_bar.progress(10)
-                addr, lat, lng = search_location_info(place)
-                metadata = {
-                    "place": place, 
-                    "furigana": furigana, 
-                    "description": desc,
-                    "address": addr, 
-                    "lat": lat, 
-                    "lng": lng
-                }
-                
-                # 圧縮＆ファイルリスト
-                status_text.text("画像を圧縮中...")
-                progress_bar.progress(30)
-                sub_files = []
-                main_file = None
-                
-                for f in files:
-                    name = f["name"]
-                    s = settings[name]
-                    if not s["sel"]: 
-                        continue
-                    
-                    img = Image.open(os.path.join("data", name))
-                    en = enhance_image(img, s["b"], s["c"], s["col"])
-                    buf = compress_image(en, max_bytes)
-                    out = f"compressed_{name}"
-                    
-                    if buf:
-                        with open(os.path.join(session_dir, out), "wb") as fp: 
-                            fp.write(buf.getvalue())
-                        sub_files.append(out)
-                        if s["main"]: 
-                            main_file = out
-                        logger.info(f"Compressed image: {name} -> {out}")
-                
-                metadata["main_file"] = main_file
-                metadata["sub_files"] = sub_files
-                
-                # CSV 作成
-                status_text.text("メタデータを作成中...")
-                progress_bar.progress(50)
-                csv_path = os.path.join(session_dir, "metadata.csv")
-                pd.DataFrame([metadata]).to_csv(csv_path, index=False)
-                logger.info("Metadata CSV created")
-                
-                # Google Drive にチャンクアップロード
-                status_text.text("Google Driveにアップロード中...")
-                progress_bar.progress(60)
-                new_fid, new_name = create_timestamped_folder(service, folder_id)
-                st.info(f"▶ アップロード先: {new_name}")
-                
-                files_to_upload = os.listdir(session_dir)
-                for i, fn in enumerate(files_to_upload):
-                    fp = os.path.join(session_dir, fn)
-                    mime = "image/jpeg" if fn.lower().endswith((".jpg", ".jpeg")) else "text/csv"
-                    
-                    try:
-                        media = MediaIoBaseUpload(
-                            open(fp, "rb"), 
-                            mimetype=mime,
-                            resumable=True, 
-                            chunksize=1024*1024
-                        )
-                        req = service.files().create(
-                            body={"name": fn, "parents": [new_fid]},
-                            media_body=media
-                        )
-                        
-                        uploaded = False
-                        with st.spinner(f"Uploading {fn}..."):
-                            while not uploaded:
-                                status, resp = req.next_chunk()
-                                if status:
-                                    progress = int(status.progress() * 100)
-                                    st.write(f"  {fn}: {progress}%")
-                                if resp:
-                                    uploaded = True
-                        
-                        st.success(f"  ✅ {fn} uploaded")
-                        logger.info(f"Uploaded file: {fn}")
-                        
-                        # プログレスバー更新
-                        upload_progress = 60 + (i + 1) / len(files_to_upload) * 20
-                        progress_bar.progress(int(upload_progress))
-                        
-                    except Exception as e:
-                        st.error(f"❌ アップロード失敗: {fn} - {e}")
-                        logger.error(f"Upload failed for {fn}: {e}")
-                
-                st.success("🎉 Drive へのアップロード完了")
-                
-                # FC 自動登録
-                status_text.text("FCサイトに自動登録中...")
-                progress_bar.progress(80)
-                
-                if not fc_user or not fc_pass:
-                    st.warning("⚠️ FCサイトのログイン情報が入力されていません。自動登録をスキップします。")
-                    logger.warning("FC login credentials not provided, skipping auto-registration")
-                else:
-                    try:
-                        run_fc_registration(fc_user, fc_pass, headless, session_dir, metadata)
-                        st.success("✅ FCサイト自動登録完了")
-                        logger.info("FC registration completed successfully")
-                    except Exception as e:
-                        st.error(f"❌ 自動登録中にエラー発生: {e}")
-                        logger.error(f"FC registration failed: {e}")
-                        logger.error(f"Traceback: {traceback.format_exc()}")
-                        
-                        # エラー詳細をユーザーに表示
-                        with st.expander("エラー詳細"):
-                            st.code(traceback.format_exc())
-                
-                # 完了
-                progress_bar.progress(100)
-                status_text.text("処理完了！")
-                
-                # ローカル削除
-                try:
-                    shutil.rmtree(session_dir)
-                    logger.info(f"Cleaned up session directory: {session_dir}")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup session directory: {e}")
-                
-            except Exception as e:
-                st.error(f"❌ 処理中にエラーが発生しました: {e}")
-                logger.error(f"Main process error: {e}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                
-                # エラー詳細をユーザーに表示
-                with st.expander("エラー詳細"):
-                    st.code(traceback.format_exc())
-    
-    except Exception as e:
-        st.error(f"❌ アプリケーション初期化エラー: {e}")
-        logger.error(f"Application initialization error: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # エラー詳細をユーザーに表示
-        with st.expander("エラー詳細"):
+
+    place = st.text_input("地名（漢字）")
+    furigana = st.text_input("ふりがな")
+    desc = st.text_area("概要", "")
+    max_kb = st.sidebar.number_input("🔧 圧縮後最大KB", 50, 2048, 2000)
+    max_bytes = max_kb * 1024
+
+    if st.button("🔍 圧縮→検索→Drive保存→自動登録"):
+        try:
+            status_text = st.empty()
+            progress_bar = st.progress(0)
+
+            status_text.text("住所情報を検索中...")
+            progress_bar.progress(10)
+            addr, lat, lng = search_location_info(place)
+
+            if not lat or not lng:
+                st.error("⚠️ 入力された地名では位置情報が取得できません。
+例：『銀座』→ ❌、『東京都中央区銀座1-2-3』→ ✅")
+                logger.warning(f"Geocoding returned no result for: {place}")
+                st.stop()
+
+            metadata = {
+                "place": place,
+                "furigana": furigana,
+                "description": desc,
+                "address": addr,
+                "lat": lat,
+                "lng": lng
+            }
+
+            st.success("ジオコーディング成功")
+            st.json(metadata)
+
+        except Exception as e:
+            st.error(f"❌ エラーが発生しました: {e}")
             st.code(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
-
