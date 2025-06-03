@@ -72,8 +72,7 @@ def main():
             addr, lat, lng = search_location_info(place)
 
             if not lat or not lng:
-                st.error("⚠️ 入力された地名では位置情報が取得できません。
-例：『銀座』→ ❌、『東京都中央区銀座1-2-3』→ ✅")
+                st.error("⚠️ 入力された地名では位置情報が取得できません。例：『銀座』→ ❌、『東京都中央区銀座1-2-3』→ ✅")
                 logger.warning(f"Geocoding returned no result for: {place}")
                 st.stop()
 
