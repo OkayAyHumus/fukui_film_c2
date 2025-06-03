@@ -237,72 +237,122 @@ def compress_image(img, max_bytes):
 # FCサイト自動登録
 # ========================
 def run_fc_registration(user, pwd, headless, session_dir, metadata):
-    logger.info("Starting FC registration process")
+    logger.info("🔁 FCサイト登録処理を開始")
 
     if not install_chrome_and_driver():
-        raise Exception("Failed to setup Chrome environment")
+        raise Exception("❌ Chrome環境のセットアップに失敗")
 
-    options = setup_chrome_options(headless=headless)
+    options = setup_chrome_options()
+    if not headless:
+        options.remove_argument("--headless")
+
     driver_path = get_chrome_driver_path()
-    logger.info(f"Using ChromeDriver path: {driver_path}")
+    logger.info(f"✅ 使用するChromeDriverパス: {driver_path}")
 
     driver = None
     try:
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 40)
+        logger.info("✅ ChromeDriver起動成功")
 
-        logger.info("Chrome driver started successfully")
+        # Step 1: ログイン
+        logger.info("🔐 FCサイトにログイン中...")
+        driver.get(f"{FC_BASE_URL}/login.php")
+        wait.until(EC.visibility_of_element_located((By.NAME, "login_id"))).send_keys(user)
+        driver.find_element(By.NAME, "password").send_keys(pwd)
+        driver.find_element(By.NAME, "login").click()
+        logger.info("✅ ログイン完了")
 
-        try:
-            driver.get("https://www.google.com")
+        # Step 2: 新規登録ページへ遷移
+        logger.info("📄 登録ページへ遷移中...")
+        driver.get(f"{FC_BASE_URL}/location/?mode=detail&id=0")
+        wait.until(EC.presence_of_element_located((By.NAME, "name_ja")))
+        logger.info("✅ 登録画面に到達")
+
+        # Step 3: 地名・ふりがな・住所を入力
+        for key, field in [("place", "name_ja"), ("furigana", "name_kana"), ("address", "place_ja")]:
+            el = driver.find_element(By.NAME, field)
+            el.clear()
+            el.send_keys(metadata.get(key, ""))
+            logger.info(f"入力: {field} = {metadata.get(key, '')}")
+
+        # Step 4: 緯度経度を自動取得
+        logger.info("📍 緯度経度を自動取得中...")
+        btn = driver.find_element(By.ID, "btn-g-search")
+        driver.execute_script("arguments[0].click();", btn)
+        wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
+        logger.info("✅ 緯度経度取得成功")
+
+        # Step 5: 概要
+        desc = driver.find_element(By.ID, "entry-description-ja")
+        desc.clear()
+        desc.send_keys(metadata.get("description", ""))
+        logger.info("入力: 概要 = OK")
+
+        # Step 6: 非公開に設定
+        sel = driver.find_element(By.NAME, "activated")
+        for opt in sel.find_elements(By.TAG_NAME, "option"):
+            if opt.get_attribute("value") == "0":
+                opt.click()
+                logger.info("設定: 非公開フラグ = ON")
+                break
+
+        # Step 7: メイン画像登録
+        main_file = metadata.get("main_file")
+        if main_file:
+            logger.info(f"🖼️ メイン画像を設定中: {main_file}")
+            driver.find_element(By.ID, "select-main-img").click()
+            wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
+            time.sleep(1)
+            for box in driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box"):
+                if main_file in box.text:
+                    link = box.find_element(By.CSS_SELECTOR, "a.select-img-vw")
+                    link.click()
+                    logger.info(f"✅ メイン画像を選択: {main_file}")
+                    break
+            time.sleep(3)
+
+        # Step 8: 周辺画像（サブ）登録
+        sub_files = metadata.get("sub_files", [])
+        for sub in sub_files:
+            logger.info(f"➕ 周辺画像を追加中: {sub}")
+            driver.find_element(By.ID, "select-sub-img").click()
+            wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
+            input_box = wait.until(EC.presence_of_element_located((By.ID, "search-file-name")))
+            input_box.clear()
+            input_box.send_keys(sub)
+            driver.find_element(By.ID, "search-img").click()
             time.sleep(2)
-            logger.info("Google loaded successfully")
-        except Exception as e:
-            logger.error("Failed to load Google")
-            logger.error(traceback.format_exc())
-            raise
+            try:
+                results = driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box")
+                if results:
+                    link = results[0].find_element(By.CSS_SELECTOR, "a.select-img-vw")
+                    link.click()
+                    logger.info(f"✅ 周辺画像登録完了: {sub}")
+            except Exception as e:
+                logger.warning(f"⚠️ 周辺画像の選択失敗: {sub} - {e}")
+            time.sleep(2)
 
-        try:
-            driver.get(f"{FC_BASE_URL}/login.php")
-            login_id_element = wait.until(EC.visibility_of_element_located((By.NAME, "login_id")))
-            login_id_element.send_keys(user)
-
-            password_element = driver.find_element(By.NAME, "password")
-            password_element.send_keys(pwd)
-
-            login_button = driver.find_element(By.NAME, "login")
-            login_button.click()
-            logger.info("Login completed")
-        except Exception as e:
-            logger.error("Login step failed")
-            logger.error(traceback.format_exc())
-            raise
-
-        try:
-            driver.get(f"{FC_BASE_URL}/location/?mode=detail&id=0")
-            wait.until(EC.presence_of_element_located((By.NAME, "name_ja")))
-            logger.info("Navigated to registration page")
-        except Exception as e:
-            logger.error("Navigation to registration page failed")
-            logger.error(traceback.format_exc())
-            raise
-
-        # 以下、同様にアップロード・入力処理の各ブロックを try-except で囲む
-        # 必要であれば続けて分けて挿入できます
+        # Step 9: 保存
+        logger.info("💾 登録情報を保存中...")
+        save_btn = wait.until(EC.element_to_be_clickable((By.ID, "save-btn")))
+        save_btn.click()
+        wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "alert-success")))
+        logger.info("✅ ロケ地登録完了！")
 
     except Exception as e:
-        logger.error(f"FC registration error: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ エラー発生: {e}")
+        logger.error(traceback.format_exc())
         raise
-
     finally:
         if driver:
             if headless:
                 driver.quit()
-                logger.info("Chrome driver closed")
+                logger.info("🧹 Chromeドライバを終了しました")
             else:
-                logger.info("ヘッドレスOFF のため、ブラウザが開いたままです。")
+                logger.info("📌 ヘッドレスOFFのためブラウザは開いたままです")
+
 
 # ========================
 # ログ表示コンポーネント
