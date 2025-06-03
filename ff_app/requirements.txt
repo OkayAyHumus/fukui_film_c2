@@ -1,11 +1,21 @@
-streamlit==1.35.0
-pandas
-requests
-Pillow
-pykakasi
-google-auth
-google-auth-oauthlib
-google-api-python-client
-chromedriver-autoinstaller
-selenium==4.20.0
-webdriver-manager
+# Streamlit
+streamlit>=1.24.0
+
+# Selenium操作とドライバー管理
+selenium==4.19.0
+webdriver-manager==3.8.6
+chromedriver-binary==122.0.6261.69.0  # Chrome v122に対応（例）
+
+# Google Drive API
+google-api-python-client==2.126.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+
+# その他依存ライブラリ
+pandas==2.2.2
+Pillow==10.3.0
+pykakasi==2.2.1
+requests==2.32.2
+
+# ログ・環境整備系
+tqdm==4.66.4
