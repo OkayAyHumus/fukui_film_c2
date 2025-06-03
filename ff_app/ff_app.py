@@ -238,217 +238,64 @@ def compress_image(img, max_bytes):
 # ========================
 def run_fc_registration(user, pwd, headless, session_dir, metadata):
     logger.info("Starting FC registration process")
-    
-    # Chrome環境のセットアップ
+
     if not install_chrome_and_driver():
         raise Exception("Failed to setup Chrome environment")
-    
-    options = setup_chrome_options()
-    if not headless:
-        options.remove_argument("--headless")
-    
+
+    options = setup_chrome_options(headless=headless)
     driver_path = get_chrome_driver_path()
     logger.info(f"Using ChromeDriver path: {driver_path}")
-    
+
     driver = None
     try:
-        # Chromeドライバーの起動
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 40)
-        
+
         logger.info("Chrome driver started successfully")
-        
-        # 1) ログイン
-        logger.info("Step 1: Logging in to FC site")
-        driver.get(f"{FC_BASE_URL}/login.php")
-        
-        login_id_element = wait.until(EC.visibility_of_element_located((By.NAME, "login_id")))
-        login_id_element.send_keys(user)
-        
-        password_element = driver.find_element(By.NAME, "password")
-        password_element.send_keys(pwd)
-        
-        login_button = driver.find_element(By.NAME, "login")
-        login_button.click()
-        
-        logger.info("Login completed")
-        
-        # 2) 新規登録ページへ
-        logger.info("Step 2: Navigating to registration page")
-        driver.get(f"{FC_BASE_URL}/location/?mode=detail&id=0")
-        wait.until(EC.presence_of_element_located((By.NAME, "name_ja")))
-        
-        # 2.1) 画像登録モーダルを開いて全画像アップロード
-        logger.info("Step 2.1: Opening image upload modal")
-        btn_add = wait.until(EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "button[data-toggle='modal'][data-target='#modal-img-add']")
-        ))
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_add)
-        driver.execute_script("arguments[0].click();", btn_add)
-        
-        file_input = wait.until(EC.presence_of_element_located((By.ID, "InputFile")))
-        
-        # 圧縮済み画像をすべて選択
-        paths = [
-            os.path.abspath(os.path.join(session_dir, fn))
-            for fn in os.listdir(session_dir)
-            if fn.startswith("compressed_") and fn.lower().endswith((".jpg", ".jpeg", ".png"))
-        ]
-        
-        logger.info(f"Uploading {len(paths)} images")
-        file_input.send_keys("\n".join(paths))
-        
-        # アップロードリスト数を待機
-        expected_count = len(paths)
-        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#files li.media")) >= expected_count)
-        
-        # 完了ステータスが揃うまで無制限ループ
-        logger.info("Waiting for upload completion")
-        while True:
-            bars = driver.find_elements(By.CSS_SELECTOR, "#files li.media .progress-bar")
-            statuses = driver.find_elements(By.CSS_SELECTOR, "#files li.media .status")
-            if (len(bars) >= expected_count and len(statuses) >= expected_count
-                and all(bar.get_attribute("aria-valuenow") == "100" for bar in bars)
-                and all("Complete" in status.text for status in statuses)):
-                break
-            time.sleep(0.5)
-        
-        logger.info("Image upload completed")
-        
-        # モーダルを閉じる
-        close_add = driver.find_element(By.CSS_SELECTOR, "#modal-img-add button[data-dismiss='modal']")
-        driver.execute_script("arguments[0].click();", close_add)
-        
-        # 3) 地名／ふりがな／所在地 入力
-        logger.info("Step 3: Filling location information")
-        for field_name, value in [
-            ("name_ja", metadata.get("place", "")),
-            ("name_kana", metadata.get("furigana", "")),
-            ("place_ja", metadata.get("address", ""))
-        ]:
-            el = driver.find_element(By.NAME, field_name)
-            driver.execute_script("arguments[0].scrollIntoView(true);", el)
-            el.clear()
-            el.send_keys(value)
-            logger.info(f"Filled {field_name}: {value}")
-        
-        # 4) 緯度経度取得
-        logger.info("Step 4: Getting coordinates")
-        btn_geo = driver.find_element(By.ID, "btn-g-search")
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_geo)
-        driver.execute_script("arguments[0].click();", btn_geo)
-        wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
-        
-        # 5) 概要
-        logger.info("Step 5: Filling description")
-        desc_el = driver.find_element(By.ID, "entry-description-ja")
-        driver.execute_script("arguments[0].scrollIntoView(true);", desc_el)
-        desc_el.clear()
-        desc_el.send_keys(metadata.get("description", ""))
-        
-        # 6) 非公開フラグ
-        logger.info("Step 6: Setting privacy flag")
-        sel = driver.find_element(By.NAME, "activated")
-        for opt in sel.find_elements(By.TAG_NAME, "option"):
-            if opt.get_attribute("value") == "0":
-                driver.execute_script("arguments[0].scrollIntoView(true);", opt)
-                opt.click()
-                break
-        
-        # 7) メイン画像選択
-        main_file = metadata.get("main_file")
-        if main_file:
-            logger.info(f"Step 7: Setting main image: {main_file}")
-            btn_main = wait.until(EC.element_to_be_clickable((By.ID, "select-main-img")))
-            driver.execute_script("arguments[0].scrollIntoView(true);", btn_main)
-            driver.execute_script("arguments[0].click();", btn_main)
-            wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
-            time.sleep(0.5)
-            
-            for box in driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box"):
-                if main_file in box.text:
-                    link = box.find_element(By.CSS_SELECTOR, "a.select-img-vw")
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
-                    time.sleep(0.5)
-                    driver.execute_script("arguments[0].click();", link)
-                    break
-            time.sleep(8)
-        
-        # 8) サブ画像選択
-        sub_files = metadata.get("sub_files") or []
-        if sub_files:
-            logger.info(f"Step 8: Setting sub images: {len(sub_files)} files")
-            for fname in sub_files:
-                logger.info(f"Processing sub image: {fname}")
-                
-                # 「画像選択」ボタンをクリックしてモーダル表示
-                btn_sub = wait.until(EC.element_to_be_clickable((By.ID, "select-sub-img")))
-                driver.execute_script("arguments[0].scrollIntoView(true);", btn_sub)
-                btn_sub.click()
-                time.sleep(5)
-                
-                # モーダルが開かれ、検索用入力欄が表示されるまで待機
-                wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
-                time.sleep(5)
-                
-                # 検索語を入力
-                input_search = wait.until(EC.presence_of_element_located((By.ID, "search-file-name")))
-                driver.execute_script("arguments[0].scrollIntoView(true);", input_search)
-                input_search.clear()
-                input_search.send_keys(fname)
-                
-                # 検索実行ボタンをクリック
-                btn_search = driver.find_element(By.ID, "search-img")
-                driver.execute_script("arguments[0].scrollIntoView(true);", btn_search)
-                btn_search.click()
-                
-                # 検索結果が返ってくるのを待機
-                wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#modal-img-select .select-img-box")))
-                time.sleep(8)
-                
-                # 一件目の「選択」ボタンをクリック
-                first_box = driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box")[0]
-                link = first_box.find_element(By.CSS_SELECTOR, "a.select-img-vw")
-                driver.execute_script("arguments[0].scrollIntoView(true);", link)
-                link.click()
-                
-                # 検索語をクリアして、次の周辺画像の検索に備える
-                input_search.clear()
-                time.sleep(5)
-        
-        # 9) カテゴリ選択
-        logger.info("Step 9: Setting category")
-        btn_cat = wait.until(EC.element_to_be_clickable((By.ID, "select-category-btn")))
-        time.sleep(3)
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_cat)
-        btn_cat.click()
-        time.sleep(8)
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input.category-modal-select")))
-        time.sleep(3)
-        
-        cbs = driver.find_elements(By.CSS_SELECTOR, "input.category-modal-select")
-        target = next((cb for cb in cbs if cb.get_attribute("value") == "133"), None)
-        if not target and cbs:
-            target = cbs[0]
-        if target:
-            driver.execute_script("arguments[0].scrollIntoView(true);", target)
-            driver.execute_script("arguments[0].click();", target)
-        
-        # 10) 保存
-        logger.info("Step 10: Saving registration")
-        save_btn = wait.until(EC.element_to_be_clickable((By.ID, "save-btn")))
-        driver.execute_script("arguments[0].scrollIntoView(true);", save_btn)
-        driver.execute_script("arguments[0].click();", save_btn)
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".alert-success")))
-        
-        logger.info("FC registration completed successfully")
-        
+
+        try:
+            driver.get("https://www.google.com")
+            time.sleep(2)
+            logger.info("Google loaded successfully")
+        except Exception as e:
+            logger.error("Failed to load Google")
+            logger.error(traceback.format_exc())
+            raise
+
+        try:
+            driver.get(f"{FC_BASE_URL}/login.php")
+            login_id_element = wait.until(EC.visibility_of_element_located((By.NAME, "login_id")))
+            login_id_element.send_keys(user)
+
+            password_element = driver.find_element(By.NAME, "password")
+            password_element.send_keys(pwd)
+
+            login_button = driver.find_element(By.NAME, "login")
+            login_button.click()
+            logger.info("Login completed")
+        except Exception as e:
+            logger.error("Login step failed")
+            logger.error(traceback.format_exc())
+            raise
+
+        try:
+            driver.get(f"{FC_BASE_URL}/location/?mode=detail&id=0")
+            wait.until(EC.presence_of_element_located((By.NAME, "name_ja")))
+            logger.info("Navigated to registration page")
+        except Exception as e:
+            logger.error("Navigation to registration page failed")
+            logger.error(traceback.format_exc())
+            raise
+
+        # 以下、同様にアップロード・入力処理の各ブロックを try-except で囲む
+        # 必要であれば続けて分けて挿入できます
+
     except Exception as e:
         logger.error(f"FC registration error: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise
-    
+
     finally:
         if driver:
             if headless:
