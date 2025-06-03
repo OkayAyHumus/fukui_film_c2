@@ -250,7 +250,7 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
     try:
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 40)
+        wait = WebDriverWait(driver, 60)
 
         logger.info("Chrome driver started successfully")
 
@@ -288,8 +288,22 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
             logger.error(traceback.format_exc())
             raise
 
-        # 以下、同様にアップロード・入力処理の各ブロックを try-except で囲む
-        # 必要であれば続けて分けて挿入できます
+        try:
+            logger.info("Clicking address search button")
+            btn_geo = wait.until(EC.element_to_be_clickable((By.ID, "btn-g-search")))
+            driver.execute_script("arguments[0].scrollIntoView(true);", btn_geo)
+            time.sleep(1)
+            btn_geo.click()
+            time.sleep(1)
+            logger.info("Waiting for latitude field to be filled...")
+            wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
+            logger.info("Latitude successfully populated")
+        except Exception as e:
+            logger.error("Failed to get coordinates")
+            logger.error(traceback.format_exc())
+            raise
+
+        # 以下、他の操作（アップロード、入力など）も必要に応じて try-except でラップ可能
 
     except Exception as e:
         logger.error(f"FC registration error: {e}")
