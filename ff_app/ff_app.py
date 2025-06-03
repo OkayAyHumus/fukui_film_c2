@@ -53,7 +53,7 @@ def setup_chrome_options():
     """Streamlit Cloud環境でのChrome設定"""
     options = Options()
     
-    options.add_argument("--headless=new")  # <-- 追加（Cloudで安定する）
+    options.add_argument("--headless)  # <-- 追加（Cloudで安定する）
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
