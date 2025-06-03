@@ -72,25 +72,16 @@ def setup_chrome_options():
 
     
 def get_chrome_driver_path():
-    """ChromeDriverのパスを取得"""
-    try:
-        import chromedriver_binary
-        return chromedriver_binary.chromedriver_filename
-    except Exception:
-        import chromedriver_autoinstaller
-        chromedriver_autoinstaller.install()
-        return shutil.which("chromedriver")
+    """ChromeDriverを強制的にchromedriver_autoinstallerでセットアップ"""
+    import chromedriver_autoinstaller
+    driver_path = chromedriver_autoinstaller.install()
+    logger.info(f"Chromedriver installed to: {driver_path}")
+    return driver_path
 
 def install_chrome_and_driver():
-    """Chrome と ChromeDriver のインストール（必要に応じて）"""
-    try:
-        # chromedriver-binaryがインストールされているかチェック
-        import chromedriver_binary
-        logger.info("chromedriver-binary is already installed")
-        return True
-    except ImportError:
-        logger.warning("chromedriver-binary not found. Please install it via requirements.txt")
-        return False
+    """Streamlit Cloudで自動インストールされる前提で常にTrueを返す"""
+    return True
+
 
 # ========================
 # Google Drive 接続・フォルダ作成
