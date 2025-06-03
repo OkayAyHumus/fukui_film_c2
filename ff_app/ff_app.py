@@ -43,15 +43,12 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-...
+
 # ========================
 # Selenium設定関数
 # ========================
 def setup_chrome_options():
-    """Streamlit Cloud環境でのChrome設定"""
     options = Options()
-
-    # 基本的なオプション
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -69,45 +66,32 @@ def setup_chrome_options():
     options.add_argument("--disable-ipc-flooding-protection")
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
-
-    # メモリ使用量を抑制
     options.add_argument("--memory-pressure-off")
     options.add_argument("--max_old_space_size=4096")
-
-    # セキュリティ関連
     options.add_argument("--disable-web-security")
-    options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--ignore-certificate-errors")
     options.add_argument("--ignore-ssl-errors")
     options.add_argument("--ignore-certificate-errors-spki-list")
-
     return options
 
 def get_chrome_driver_path():
-    """ChromeDriverのパスを取得"""
-    # Streamlit Cloudの場合、chromedriver-binaryを使用
     try:
         import chromedriver_binary
         return chromedriver_binary.chromedriver_filename
     except ImportError:
-        # ローカル環境の場合
         if "chromedriver_path" in st.secrets.get("selenium", {}):
             return st.secrets["selenium"]["chromedriver_path"]
         else:
-            # システムのPATHから探す
             return "chromedriver"
 
 def install_chrome_and_driver():
-    """Chrome と ChromeDriver のインストール（必要に応じて）"""
     try:
-        # chromedriver-binaryがインストールされているかチェック
         import chromedriver_binary
         logger.info("chromedriver-binary is already installed")
         return True
     except ImportError:
         logger.warning("chromedriver-binary not found. Please install it via requirements.txt")
         return False
-
 # ========================
 # Google Drive 接続・フォルダ作成
 # ========================
@@ -135,6 +119,7 @@ def create_timestamped_folder(service, parent_id):
     except Exception as e:
         logger.error(f"Failed to create folder: {e}")
         raise
+
 # ========================
 # users.csv の読み込み
 # ========================
@@ -232,6 +217,7 @@ def convert_to_furigana(text):
     except Exception as e:
         logger.error(f"Furigana conversion error: {e}")
         return text
+
 # ========================
 # 画像補正・圧縮
 # ========================
@@ -262,9 +248,8 @@ def compress_image(img, max_bytes):
     except Exception as e:
         logger.error(f"Image compression error: {e}")
         return None
-
 # ========================
-# FCサイト自動登録（冒頭部分）
+# FCサイト自動登録
 # ========================
 def run_fc_registration(user, pwd, headless, session_dir, metadata):
     logger.info("Starting FC registration process")
@@ -286,7 +271,6 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 40)
-
         logger.info("Chrome driver started successfully")
 
         # 1) ログイン
@@ -301,34 +285,30 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
 
         login_button = driver.find_element(By.NAME, "login")
         login_button.click()
-
         logger.info("Login completed")
 
         # 2) 新規登録ページへ遷移
         logger.info("Step 2: Navigating to registration page")
         driver.get(f"{FC_BASE_URL}/location/?mode=detail&id=0")
         wait.until(EC.presence_of_element_located((By.NAME, "name_ja")))
-        # 2.1) 画像登録モーダルを開いて全画像アップロード
+
+        # 2.1) 画像登録モーダルを開いて画像アップロード
         logger.info("Step 2.1: Opening image upload modal")
-        btn_add = wait.until(EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "button[data-toggle='modal'][data-target='#modal-img-add']")
-        ))
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_add)
+        btn_add = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-toggle='modal'][data-target='#modal-img-add']")))
         driver.execute_script("arguments[0].click();", btn_add)
 
         file_input = wait.until(EC.presence_of_element_located((By.ID, "InputFile")))
 
-        # 圧縮済み画像をすべて選択
+        # 圧縮済み画像ファイルを取得
         paths = [
             os.path.abspath(os.path.join(session_dir, fn))
             for fn in os.listdir(session_dir)
             if fn.startswith("compressed_") and fn.lower().endswith((".jpg", ".jpeg", ".png"))
         ]
-
         logger.info(f"Uploading {len(paths)} images")
         file_input.send_keys("\n".join(paths))
 
-        # アップロード完了待ち
+        # アップロード完了を待機
         expected_count = len(paths)
         wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#files li.media")) >= expected_count)
 
@@ -336,9 +316,11 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
         while True:
             bars = driver.find_elements(By.CSS_SELECTOR, "#files li.media .progress-bar")
             statuses = driver.find_elements(By.CSS_SELECTOR, "#files li.media .status")
-            if (len(bars) >= expected_count and len(statuses) >= expected_count
-                and all(bar.get_attribute("aria-valuenow") == "100" for bar in bars)
-                and all("Complete" in status.text for status in statuses)):
+            if (
+                len(bars) >= expected_count and len(statuses) >= expected_count and
+                all(bar.get_attribute("aria-valuenow") == "100" for bar in bars) and
+                all("Complete" in status.text for status in statuses)
+            ):
                 break
             time.sleep(3)
 
@@ -364,116 +346,94 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
         # 4) 緯度経度取得
         logger.info("Step 4: Getting coordinates")
         btn_geo = driver.find_element(By.ID, "btn-g-search")
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_geo)
         driver.execute_script("arguments[0].click();", btn_geo)
         wait.until(lambda d: d.find_element(By.NAME, "lat").get_attribute("value") != "")
 
-        # 5) 概要
+        # 5) 概要入力
         logger.info("Step 5: Filling description")
         desc_el = driver.find_element(By.ID, "entry-description-ja")
-        driver.execute_script("arguments[0].scrollIntoView(true);", desc_el)
         desc_el.clear()
         desc_el.send_keys(metadata.get("description", ""))
 
-        # 6) 非公開フラグ
+        # 6) 公開状態を非公開に変更
         logger.info("Step 6: Setting privacy flag")
         sel = driver.find_element(By.NAME, "activated")
         for opt in sel.find_elements(By.TAG_NAME, "option"):
             if opt.get_attribute("value") == "0":
-                driver.execute_script("arguments[0].scrollIntoView(true);", opt)
                 opt.click()
                 break
+
         # 7) メイン画像選択
         main_file = metadata.get("main_file")
         if main_file:
             logger.info(f"Step 7: Setting main image: {main_file}")
             btn_main = wait.until(EC.element_to_be_clickable((By.ID, "select-main-img")))
-            driver.execute_script("arguments[0].scrollIntoView(true);", btn_main)
             driver.execute_script("arguments[0].click();", btn_main)
             wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
-            time.sleep(3)
+            time.sleep(2)
 
             for box in driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box"):
                 if main_file in box.text:
                     link = box.find_element(By.CSS_SELECTOR, "a.select-img-vw")
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
-                    time.sleep(3)
+                    time.sleep(2)
                     driver.execute_script("arguments[0].click();", link)
                     break
-            time.sleep(8)
+            time.sleep(5)
 
         # 8) サブ画像選択
         sub_files = metadata.get("sub_files") or []
         if sub_files:
             logger.info(f"Step 8: Setting sub images: {len(sub_files)} files")
             for fname in sub_files:
+                if fname == main_file:
+                    continue
                 logger.info(f"Processing sub image: {fname}")
 
-                # 「画像選択」ボタンをクリックしてモーダル表示
                 btn_sub = wait.until(EC.element_to_be_clickable((By.ID, "select-sub-img")))
-                driver.execute_script("arguments[0].scrollIntoView(true);", btn_sub)
-                btn_sub.click()
-                time.sleep(5)
+                driver.execute_script("arguments[0].click();", btn_sub)
+                time.sleep(3)
 
-                # モーダルが開かれ、検索用入力欄が表示されるまで待機
                 wait.until(EC.visibility_of_element_located((By.ID, "modal-img-select")))
-                time.sleep(5)
-
-                # 検索語を入力
                 input_search = wait.until(EC.presence_of_element_located((By.ID, "search-file-name")))
-                driver.execute_script("arguments[0].scrollIntoView(true);", input_search)
                 input_search.clear()
                 input_search.send_keys(fname)
 
-                # 検索実行ボタンをクリック
                 btn_search = driver.find_element(By.ID, "search-img")
-                driver.execute_script("arguments[0].scrollIntoView(true);", btn_search)
                 btn_search.click()
-
-                # 検索結果が返ってくるのを待機
                 wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#modal-img-select .select-img-box")))
-                time.sleep(8)
+                time.sleep(3)
 
-                # 一件目の「選択」ボタンをクリック
                 first_box = driver.find_elements(By.CSS_SELECTOR, "#modal-img-select .select-img-box")[0]
                 link = first_box.find_element(By.CSS_SELECTOR, "a.select-img-vw")
-                driver.execute_script("arguments[0].scrollIntoView(true);", link)
-                link.click()
-
-                # 検索語をクリアして次へ
-                input_search.clear()
-                time.sleep(5)
+                driver.execute_script("arguments[0].click();", link)
+                time.sleep(3)
 
         # 9) カテゴリ選択
         logger.info("Step 9: Setting category")
         btn_cat = wait.until(EC.element_to_be_clickable((By.ID, "select-category-btn")))
-        time.sleep(3)
-        driver.execute_script("arguments[0].scrollIntoView(true);", btn_cat)
-        btn_cat.click()
-        time.sleep(8)
+        driver.execute_script("arguments[0].click();", btn_cat)
         wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input.category-modal-select")))
-        time.sleep(3)
+        time.sleep(2)
 
         cbs = driver.find_elements(By.CSS_SELECTOR, "input.category-modal-select")
         target = next((cb for cb in cbs if cb.get_attribute("value") == "133"), None)
         if not target and cbs:
             target = cbs[0]
         if target:
-            driver.execute_script("arguments[0].scrollIntoView(true);", target)
             driver.execute_script("arguments[0].click();", target)
 
         # 10) 保存
         logger.info("Step 10: Saving registration")
         save_btn = wait.until(EC.element_to_be_clickable((By.ID, "save-btn")))
-        driver.execute_script("arguments[0].scrollIntoView(true);", save_btn)
         driver.execute_script("arguments[0].click();", save_btn)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".alert-success")))
 
-        logger.info("FC registration completed successfully")
+        logger.info("✅ FC registration completed successfully")
 
     except Exception as e:
-        logger.error(f"FC registration error: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ FC registration error: {e}")
+        logger.error(traceback.format_exc())
         raise
 
     finally:
@@ -482,19 +442,14 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
                 driver.quit()
                 logger.info("Chrome driver closed")
             else:
-                logger.info("ヘッドレスOFF のため、ブラウザが開いたままです。")
+                logger.info("ヘッドレスOFF のためブラウザが開いたままです。")
+
 def main():
     st.set_page_config(page_title="画像圧縮＋地名情報取得", layout="wide")
     st.title("📷 画像圧縮＋地名情報取得アプリ")
 
-    # システム情報表示
-    show_system_info()
-
-    # ログシステム初期化
-    show_logs()
-
+    # Google Drive認証と users.csv 読み込み
     try:
-        # Google Drive 認証と users.csv 読み込み
         logger.info("Initializing Google Drive service")
         service = get_drive_service()
         users_df, _ = load_users(service, st.secrets["folders"]["admin_folder_id"])
@@ -507,39 +462,40 @@ def main():
         if "username" not in st.session_state:
             st.stop()
 
-        # FCログイン情報入力
+        # サイドバーにログイン者名・設定
         st.sidebar.header("⚙️ FCサイト設定")
         fc_user = st.sidebar.text_input("FC ログインID")
         fc_pass = st.sidebar.text_input("FC パスワード", type="password")
         headless = st.sidebar.checkbox("ヘッドレス実行", value=True)
 
-        # 対象フォルダID入力
+        # フォルダIDを指定
         folder_id = st.text_input("📁 Google Drive フォルダIDを入力")
         if not folder_id:
             st.stop()
 
-        # 画像ファイル取得
+        # 対象画像の取得
         logger.info(f"Loading images from folder: {folder_id}")
         files = service.files().list(
             q=f"'{folder_id}' in parents and mimeType contains 'image/' and trashed=false",
-            fields="files(id,name)"
+            fields="files(id, name)"
         ).execute().get("files", [])
 
         if not files:
             st.warning("画像が見つかりません")
             return
 
-        # メタ情報入力
+        # 地名などの情報を入力
+        st.header("📝 メタデータ入力")
         place = st.text_input("地名（漢字）")
         furigana = st.text_input("ふりがな", convert_to_furigana(place) if place else "")
         desc = st.text_area("概要", "")
         max_kb = st.sidebar.number_input("🔧 圧縮後最大KB", 50, 2048, 2000)
         max_bytes = max_kb * 1024
 
-        # 画像表示と補正設定
+        # 画像処理用UIと圧縮設定
         st.header("🖼️ 画像選択・補正")
-        select_all = st.checkbox("すべて選択")
         settings = {}
+        select_all = st.checkbox("全画像を選択")
         os.makedirs("tmp_images", exist_ok=True)
 
         for f in files:
@@ -551,34 +507,33 @@ def main():
                     fp.write(service.files().get_media(fileId=fid).execute())
 
                 img = Image.open(path)
-
                 b = st.slider(f"明るさ [{name}]", 0.5, 2.0, 1.2, 0.1, key=f"b_{name}")
                 c = st.slider(f"コントラスト [{name}]", 0.5, 2.0, 1.2, 0.1, key=f"c_{name}")
                 col = st.slider(f"彩度 [{name}]", 0.5, 2.0, 1.3, 0.1, key=f"col_{name}")
 
                 en = enhance_image(img.copy(), b, c, col)
 
-                c1, c2 = st.columns(2)
-                with c1:
+                col1, col2 = st.columns(2)
+                with col1:
                     st.image(img, caption="元画像", use_container_width=True)
-                with c2:
+                with col2:
                     st.image(en, caption="補正後", use_container_width=True)
 
-                main = st.checkbox("メインで使う", key=f"main_{name}")
-                sel = st.checkbox("選択", key=f"sel_{name}", value=select_all)
+                main = st.checkbox("メイン画像に設定", key=f"main_{name}")
+                sel = st.checkbox("この画像を使う", key=f"sel_{name}", value=select_all)
 
                 settings[name] = {"b": b, "c": c, "col": col, "main": main, "sel": sel}
 
             except Exception as e:
-                st.error(f"画像 {name} の読み込みに失敗しました: {e}")
+                st.error(f"{name} の画像処理中にエラー: {e}")
 
         # 実行ボタン
-        if st.button("🔍 圧縮→検索→Drive保存→自動登録"):
+        if st.button("📤 圧縮＋検索＋Drive保存＋FC登録"):
             try:
                 status_text = st.empty()
                 progress_bar = st.progress(0)
 
-                # 住所取得
+                # ① Geocoding
                 status_text.text("① 住所情報を取得中...")
                 address, lat, lng = search_location_info(place)
                 metadata = {
@@ -591,7 +546,7 @@ def main():
                 }
                 progress_bar.progress(10)
 
-                # 画像圧縮
+                # ② 画像圧縮
                 status_text.text("② 画像を圧縮中...")
                 output_dir = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 os.makedirs(output_dir, exist_ok=True)
@@ -611,8 +566,8 @@ def main():
 
                     if buf:
                         out_path = os.path.join(output_dir, f"compressed_{name}")
-                        with open(out_path, "wb") as f:
-                            f.write(buf.getvalue())
+                        with open(out_path, "wb") as outf:
+                            outf.write(buf.getvalue())
                         sub_files.append(f"compressed_{name}")
                         if settings[name]["main"]:
                             main_file = f"compressed_{name}"
@@ -621,12 +576,12 @@ def main():
                 metadata["sub_files"] = sub_files
                 progress_bar.progress(40)
 
-                # メタCSV保存
+                # ③ メタ情報CSVを保存
                 df = pd.DataFrame([metadata])
                 df.to_csv(os.path.join(output_dir, "metadata.csv"), index=False)
                 progress_bar.progress(50)
 
-                # Google Drive フォルダ作成・アップロード
+                # ④ Google Drive へアップロード
                 status_text.text("③ Google Drive にアップロード中...")
                 new_folder_id, _ = create_timestamped_folder(service, folder_id)
                 for fname in os.listdir(output_dir):
@@ -637,38 +592,29 @@ def main():
                         body={"name": fname, "parents": [new_folder_id]},
                         media_body=media
                     ).execute()
-
                 progress_bar.progress(70)
 
-                # FC自動登録
+                # ⑤ FC自動登録
                 if fc_user and fc_pass:
                     status_text.text("④ FCサイトに自動登録中...")
                     run_fc_registration(fc_user, fc_pass, headless, output_dir, metadata)
                     st.success("✅ FCサイト登録が完了しました")
                 else:
                     st.warning("⚠️ FCログイン情報が未入力のため登録をスキップしました")
-
                 progress_bar.progress(100)
                 status_text.text("🎉 完了しました")
 
             except Exception as e:
-                logger.error(f"実行中エラー: {e}")
-                st.error(f"❌ エラーが発生しました: {e}")
-                with st.expander("エラー詳細"):
-                    st.code(traceback.format_exc())
+                st.error(f"❌ エラー: {e}")
+                logger.error(traceback.format_exc())
 
             finally:
-                # 一時フォルダ掃除
-                if os.path.exists(output_dir):
-                    shutil.rmtree(output_dir)
-                if os.path.exists("tmp_images"):
-                    shutil.rmtree("tmp_images")
+                shutil.rmtree(output_dir, ignore_errors=True)
+                shutil.rmtree("tmp_images", ignore_errors=True)
 
     except Exception as e:
-        logger.error(f"初期化エラー: {e}")
         st.error(f"❌ 初期化エラー: {e}")
-        with st.expander("詳細ログ"):
-            st.code(traceback.format_exc())
+        logger.error(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
