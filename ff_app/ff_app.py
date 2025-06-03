@@ -49,27 +49,17 @@ logger = logging.getLogger(__name__)
 # ========================
 # Selenium設定関数
 # ========================
-def setup_chrome_options():
-    """Streamlit Cloud環境でのChrome設定"""
+def setup_chrome_options(headless=True):
     options = Options()
-    
-    options.add_argument("--headless")  # <-- 追加（Cloudで安定する）
+    if headless:
+        options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--disable-extensions")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-renderer-backgrounding")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--ignore-certificate-errors")
-
     return options
-
     
 import tempfile
 
