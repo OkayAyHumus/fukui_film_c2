@@ -53,51 +53,33 @@ def setup_chrome_options():
     """Streamlit Cloud環境でのChrome設定"""
     options = Options()
     
-    # 基本的なオプション
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")  # <-- 追加（Cloudで安定する）
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--disable-extensions")
-    options.add_argument("--disable-plugins")
-    options.add_argument("--disable-images")
-    options.add_argument("--disable-javascript")
-    options.add_argument("--disable-default-apps")
+    options.add_argument("--disable-background-networking")
     options.add_argument("--disable-background-timer-throttling")
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--disable-ipc-flooding-protection")
-    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
-    
-    # メモリ使用量を抑制
-    options.add_argument("--memory-pressure-off")
-    options.add_argument("--max_old_space_size=4096")
-    
-    # セキュリティ関連
+    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-web-security")
-    options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--ignore-ssl-errors")
-    options.add_argument("--ignore-certificate-errors-spki-list")
-    
+
     return options
 
+    
 def get_chrome_driver_path():
     """ChromeDriverのパスを取得"""
-    # Streamlit Cloudの場合、chromedriver-binaryを使用
     try:
         import chromedriver_binary
         return chromedriver_binary.chromedriver_filename
-    except ImportError:
-        # ローカル環境の場合
-        if "chromedriver_path" in st.secrets.get("selenium", {}):
-            return st.secrets["selenium"]["chromedriver_path"]
-        else:
-            # システムのPATHから探す
-            return "chromedriver"
+    except Exception:
+        import chromedriver_autoinstaller
+        chromedriver_autoinstaller.install()
+        return shutil.which("chromedriver")
 
 def install_chrome_and_driver():
     """Chrome と ChromeDriver のインストール（必要に応じて）"""
