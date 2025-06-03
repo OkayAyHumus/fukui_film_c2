@@ -1,10 +1,11 @@
 streamlit
 selenium
-chromedriver-autoinstaller
-pykakasi
 pillow
-google-api-python-client
-google-auth
-google-auth-oauthlib
+pykakasi
 requests
 pandas
+google-auth
+google-api-python-client
+google-auth-oauthlib
+webdriver-manager
+chromedriver-autoinstaller
