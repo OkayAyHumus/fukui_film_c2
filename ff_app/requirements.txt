@@ -1,19 +1,12 @@
-# Streamlit
 streamlit>=1.24.0
-# Selenium操作とドライバー管理
 selenium==4.19.0
-webdriver-manager==3.8.6
 chromedriver-binary==120.0.6099.224.0
-# Google Drive API
+webdriver-manager==3.8.6
 google-api-python-client==2.126.0
 google-auth==2.29.0
 google-auth-oauthlib==1.2.0
-
-# その他依存ライブラリ
 pandas==2.2.2
 Pillow==10.3.0
 pykakasi==2.2.1
 requests==2.32.2
-
-# ログ・環境整備系
 tqdm==4.66.4
