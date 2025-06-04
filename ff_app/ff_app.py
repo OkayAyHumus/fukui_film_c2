@@ -267,7 +267,7 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
     driver = None
     try:
         # Chromeドライバーの起動
-        driver_path = ChromeDriverManager(version="120.0.6099.224").install()
+        driver_path = ChromeDriverManager().install(version="120.0.6099.224")
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 40)
