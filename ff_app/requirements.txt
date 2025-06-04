@@ -8,7 +8,5 @@ webdriver-manager==3.8.6
 google-api-python-client==2.126.0
 google-auth==2.29.0
 google-auth-oauthlib==1.2.0
-pykakasi==2.2.1
-unidic-lite==1.0.8
+pykakasi-lite==0.1.1
 tqdm==4.66.4
-
