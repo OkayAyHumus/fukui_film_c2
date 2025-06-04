@@ -13,7 +13,7 @@ from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageEnhance
 
-from pykakasi_lite import kakasi
+from pykakasi import kakasi
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
