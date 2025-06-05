@@ -82,22 +82,20 @@ def get_chrome_driver_path():
         return shutil.which("chromedriver")
 
 def install_chrome_and_driver():
-    # chromedriver_binary がある場合はそれを使う
     try:
         import chromedriver_binary
+        logger.info("chromedriver_binary successfully imported")
         return True
     except ImportError:
-        # secrets.toml や Streamlit secrets で chromedriver_path が指定されている場合はOKとする
-        if "chromedriver_path" in st.secrets.get("selenium", {}):
-            chromedriver_path = st.secrets["selenium"]["chromedriver_path"]
-            if os.path.exists(chromedriver_path) and os.access(chromedriver_path, os.X_OK):
-                logger.info(f"Using chromedriver at: {chromedriver_path}")
-                return True
-            else:
-                logger.error(f"chromedriver path is not executable: {chromedriver_path}")
-                return False
-        logger.error("No valid chromedriver found")
-        return False
+        # secrets に chromedriver_path があるか確認
+        chrome_path = st.secrets.get("selenium", {}).get("chromedriver_path", "")
+        if chrome_path and os.path.exists(chrome_path) and os.access(chrome_path, os.X_OK):
+            logger.info(f"Using provided chromedriver at: {chrome_path}")
+            return True
+        else:
+            logger.error(f"chromedriver path invalid or not executable: {chrome_path}")
+            return False
+
 
 
 # ========================
