@@ -267,9 +267,11 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
     driver = None
     try:
         # Chromeドライバーの起動
-        driver_path = ChromeDriverManager().install()
+        # セットアップ済みの chromedriver を使う
+        driver_path = st.secrets["selenium"]["chromedriver_path"]
         service = ChromeService(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
+
         wait = WebDriverWait(driver, 40)
         
         logger.info("Chrome driver started successfully")
