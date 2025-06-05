@@ -72,14 +72,12 @@ def setup_chrome_options():
 
     
 def get_chrome_driver_path():
-    """ChromeDriverのパスを取得"""
-    try:
-        import chromedriver_binary
-        return chromedriver_binary.chromedriver_filename
-    except Exception:
-        import chromedriver_autoinstaller
-        chromedriver_autoinstaller.install()
-        return shutil.which("chromedriver")
+    # secrets.toml や Streamlit Cloud の Secrets に明示的に設定された chromedriver のパスを優先
+    if "chromedriver_path" in st.secrets.get("selenium", {}):
+        return st.secrets["selenium"]["chromedriver_path"]
+    # デフォルトパス
+    return "/mount/src/fukui_film_c2/ff_app/chromedriver"
+
 
 def install_chrome_and_driver():
     try:
