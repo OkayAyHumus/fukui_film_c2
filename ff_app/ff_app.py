@@ -256,6 +256,20 @@ def compress_image(img, max_bytes):
 # ========================
 # FCサイト自動登録
 # ========================
+
+import os
+
+# Streamlit Cloud 上で chromedriver に実行権限を強制付与
+chromedriver_path = st.secrets["selenium"]["chromedriver_path"]
+if os.path.exists(chromedriver_path):
+    os.chmod(chromedriver_path, 0o755)
+
+
+
+
+
+
+
 def run_fc_registration(user, pwd, headless, session_dir, metadata):
     logger.info("Starting FC registration process")
     
