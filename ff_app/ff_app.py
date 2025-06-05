@@ -82,15 +82,23 @@ def get_chrome_driver_path():
         return shutil.which("chromedriver")
 
 def install_chrome_and_driver():
-    """Chrome と ChromeDriver のインストール（必要に応じて）"""
+    # chromedriver_binary がある場合はそれを使う
     try:
-        # chromedriver-binaryがインストールされているかチェック
         import chromedriver_binary
-        logger.info("chromedriver-binary is already installed")
         return True
     except ImportError:
-        logger.warning("chromedriver-binary not found. Please install it via requirements.txt")
+        # secrets.toml や Streamlit secrets で chromedriver_path が指定されている場合はOKとする
+        if "chromedriver_path" in st.secrets.get("selenium", {}):
+            chromedriver_path = st.secrets["selenium"]["chromedriver_path"]
+            if os.path.exists(chromedriver_path) and os.access(chromedriver_path, os.X_OK):
+                logger.info(f"Using chromedriver at: {chromedriver_path}")
+                return True
+            else:
+                logger.error(f"chromedriver path is not executable: {chromedriver_path}")
+                return False
+        logger.error("No valid chromedriver found")
         return False
+
 
 # ========================
 # Google Drive 接続・フォルダ作成
