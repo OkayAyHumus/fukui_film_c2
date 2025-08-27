@@ -196,16 +196,22 @@ def search_location_info(place_name):
         response = requests.get(url, timeout=10)
         data = response.json()
         
-        if data.get("status") != "OK":
-            logger.warning(f"Geocoding failed for {place_name}: {data.get('status')}")
-            return "", "", ""
+        status = data.get("status", "")
+        
+        if status == "ZERO_RESULTS":
+            logger.warning(f"Geocoding ZERO_RESULTS for {place_name}")
+            return None, None, None  # 明確に None を返す
+        elif status != "OK":
+            logger.warning(f"Geocoding failed for {place_name}: {status}")
+            raise Exception(f"Geocoding failed: {status}")
         
         r = data["results"][0]
         logger.info(f"Geocoding successful for {place_name}")
         return r["formatted_address"], r["geometry"]["location"]["lat"], r["geometry"]["location"]["lng"]
     except Exception as e:
         logger.error(f"Geocoding error: {e}")
-        return "", "", ""
+        return None, None, None
+
 
 def convert_to_furigana(text):
     try:
