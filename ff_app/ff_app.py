@@ -195,22 +195,22 @@ def search_location_info(place_name):
         url = f"https://maps.googleapis.com/maps/api/geocode/json?address={place_name}&language=ja&key={key}"
         response = requests.get(url, timeout=10)
         data = response.json()
-        
+
         status = data.get("status", "")
-        
+
         if status == "ZERO_RESULTS":
             logger.warning(f"Geocoding ZERO_RESULTS for {place_name}")
-            return None, None, None  # 明確に None を返す
+            return "", "", ""  # 空欄で返すことで登録は続行
         elif status != "OK":
             logger.warning(f"Geocoding failed for {place_name}: {status}")
             raise Exception(f"Geocoding failed: {status}")
-        
+
         r = data["results"][0]
-        logger.info(f"Geocoding successful for {place_name}")
         return r["formatted_address"], r["geometry"]["location"]["lat"], r["geometry"]["location"]["lng"]
     except Exception as e:
         logger.error(f"Geocoding error: {e}")
-        return None, None, None
+        return "", "", ""  # エラー時も空欄で返す
+
 
 
 def convert_to_furigana(text):
@@ -646,11 +646,18 @@ def main():
                 # 住所検索
                 status_text.text("住所情報を検索中...")
                 progress_bar.progress(10)
+
                 addr, lat, lng = search_location_info(place)
-                if addr is None or lat is None or lng is None:
-                    st.error(f"❌ ジオコーディング結果が見つかりませんでした（{place}）。登録をスキップします。")
-                    logger.warning(f"Skipping registration for {place} due to ZERO_RESULTS.")
-                    return  # または `st.stop()` でも良い（以降の処理を止める）
+
+                metadata = {
+                    "place": place, 
+                    "furigana": furigana, 
+                    "description": desc,
+                    "address": addr, 
+                    "lat": lat, 
+                    "lng": lng
+                }
+
 
                 
                 # 圧縮＆ファイルリスト
