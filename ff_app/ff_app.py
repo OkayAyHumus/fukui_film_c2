@@ -647,14 +647,11 @@ def main():
                 status_text.text("住所情報を検索中...")
                 progress_bar.progress(10)
                 addr, lat, lng = search_location_info(place)
-                metadata = {
-                    "place": place, 
-                    "furigana": furigana, 
-                    "description": desc,
-                    "address": addr, 
-                    "lat": lat, 
-                    "lng": lng
-                }
+                if addr is None or lat is None or lng is None:
+                    st.error(f"❌ ジオコーディング結果が見つかりませんでした（{place}）。登録をスキップします。")
+                    logger.warning(f"Skipping registration for {place} due to ZERO_RESULTS.")
+                    return  # または `st.stop()` でも良い（以降の処理を止める）
+
                 
                 # 圧縮＆ファイルリスト
                 status_text.text("画像を圧縮中...")
