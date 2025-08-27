@@ -20,5 +20,11 @@ selenium
 undetected-chromedriver==3.5.5
 webdriver-manager
 
+chromedriver-autoinstaller
+chromedriver-binary
+
+
+
+
 # ログ・ユーティリティ
 python-dotenv
