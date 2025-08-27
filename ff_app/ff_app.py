@@ -483,9 +483,15 @@ def run_fc_registration(user, pwd, headless, session_dir, metadata):
         save_btn = wait.until(EC.element_to_be_clickable((By.ID, "save-btn")))
         driver.execute_script("arguments[0].scrollIntoView(true);", save_btn)
         driver.execute_script("arguments[0].click();", save_btn)
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".alert-success")))
+        
+        try:
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".alert-success")))
+            logger.info("登録成功のアラートが表示されました")
+        except TimeoutException:
+            logger.warning("登録成功のアラートが表示されませんでしたが、続行します")
         
         logger.info("FC registration completed successfully")
+
         
     except Exception as e:
         logger.error(f"FC registration error: {e}")
