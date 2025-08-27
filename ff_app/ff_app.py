@@ -654,8 +654,7 @@ def main():
                 # 住所検索
                 status_text.text("住所情報を検索中...")
                 progress_bar.progress(10)
-
-             　 addr, lat, lng = search_location_info(place)
+                addr, lat, lng = search_location_info(place)
 
                 metadata = {
                     "place": place, 
